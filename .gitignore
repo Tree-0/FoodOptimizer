@@ -3,6 +3,8 @@ __pycache__
 # api keys
 credentials.env
 
-# large data files (these are publicly downloadable)
-FoodData_Central_branded_food_csv_2025-04-24.zip
+# large data files (these are publicly downloadable
+# and referenced in the README so I just skipped them here)
+data/
+
 

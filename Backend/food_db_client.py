@@ -11,7 +11,8 @@ class FoodDBClient:
 
     _usda_api_key = dotenv.get_key("credentials.env", "USDA_FOOD_KEY")
     base_url = "https://api.nal.usda.gov/fdc/v1/"
-    foundation_foods_folder = Path("data/foundation_foods_csv_20250424")
+    foundation_foods_folder = Path("data/FoodData_Central_foundation_foods_csv_2025-04-24")
+    fndds_foods_folder = Path("data/2021-2023_FNDDS_Nutrient_Values.xlsx")
 
     # console prints when enabled
     debug_enabled = False
@@ -81,4 +82,11 @@ class FoodDBClient:
 
         return nutrients_df[nutrients_df['fdc_id'] == fdcId]
 
-    
+    @classmethod 
+    def get_fndds_foods(cls):
+        """
+        Cleans and returns a dataframe of the FNDDS foods csv. 
+        """
+
+
+

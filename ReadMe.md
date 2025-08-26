@@ -7,7 +7,7 @@ In the future, hopefully support for pricing will be implemented, but it is very
 ## Features
 
 ## Data:
-A combination of data from the Department of Agriculture FoodData Central's API and downloadable files was used.
+A combination of data from the Department of Agriculture FoodData Central's API and downloadable files were used.
 **[[https://fdc.nal.usda.gov/|USDA FoodData Central]]**
 
 Foundation Foods and Branded Foods datasets were downloaded from the following link:
