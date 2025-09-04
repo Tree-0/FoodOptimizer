@@ -1,0 +1,4 @@
+protein_g,220,-
+carbohydrate_g,150,-
+total_fat_g,100,-
+energy_kcal,0,2200

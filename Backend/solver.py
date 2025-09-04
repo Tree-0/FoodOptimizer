@@ -1,83 +1,147 @@
-from ortools.linear_solver import pywraplp
+import math
 import pandas as pd
+from dataclasses import dataclass
+from ortools.linear_solver import pywraplp
+from nutrition_constraints import NutrientConstraints
+from typing import Iterable
+
+@dataclass
+class SolverSettings:
+    nutrition_constraints: NutrientConstraints
+    nutrients_to_optimize: Iterable[str] 
+    max_qty_per_food: float = None
+    objective_type: str = "min"
 
 class Solver:
     def __init__(self):
         pass
 
-    def solve(self, df: pd.DataFrame, min_protein: float, max_qty_per_item: float = None):
+    def solve(self, df:pd.DataFrame, settings: SolverSettings) -> tuple[pd.DataFrame, dict[str,float]]:
         """
-        df must contain these columns:
-          - 'energy_kcal' (calories per 100 g)
-          - 'protein_g' (protein grams per 100 g)
-        min_protein: required total protein in grams (g)
-        max_qty_per_item: optional upper bound in grams for any single food (if None, unbounded)
-        Returns: (selected_rows_df, totals_dict)
+        ## Arguments
+        `df: pd.DataFrame`
+            - Must contain columns whose names match the names of all nutrients in the provided `nutrition_constraints` object.\n
+        `nutrition_constraints`: NutritionConstraints object containing minimum maximum values for selected nutrients.\n
+        `max_qty_per_food`: optional upper bound in grams for any chosen single food (if None, unbounded)\n
+        ## Returns: 
+            - tuple(selected_foods_df, totals_dict)
         """
-        if min_protein < 0:
-            raise ValueError("min_protein must be nonnegative")
+        print("solve: STARTING...")
 
-        # copy and coerce numeric types
+        nutrition_constraints = settings.nutrition_constraints
+        nutrients_to_optimize = settings.nutrients_to_optimize
+        max_qty_per_food = settings.max_qty_per_food
+        objective_type = settings.objective_type
+
+        if len(nutrition_constraints.nutrients) == 0:
+            raise ValueError("No constraints in nutrition_constraints object, nothing to solve")
+        
+        if len(nutrients_to_optimize) == 0:
+            raise ValueError("No nutrients to were given to optimize for")
+
+        # Check that nutrition constraints are for valid nutrient types that exist in df
         data = df.copy()
-        if 'energy_kcal' not in data.columns or 'protein_g' not in data.columns:
-            raise KeyError("DataFrame must contain 'energy_kcal' and 'protein_g' columns")
+        for col in (list(nutrition_constraints.nutrients.keys()) + nutrients_to_optimize):
+            if col not in df.columns:
+                raise ValueError(f"{col} is not present in the dataframe")
 
-        data['energy_per_g'] = pd.to_numeric(data['energy_kcal'], errors='coerce') / 100.0
-        data['protein_per_g'] = pd.to_numeric(data['protein_g'], errors='coerce') / 100.0
-
-        # drop rows with no useful info
-        data = data.dropna(subset=['energy_per_g', 'protein_per_g']).reset_index(drop=True)
         n = len(data)
         if n == 0:
-            raise ValueError("No usable foods after coercion")
+            raise ValueError("No foods (rows) in dataframe")
 
         # create solver
         solver = pywraplp.Solver.CreateSolver('GLOP')   # continuous LP solver
         if solver is None:
             raise RuntimeError("GLOP solver unavailable")
-
         inf = solver.infinity()
 
-        # create decision variables x_i = grams of food i
-        vars = []
+        # Create decision variables and keep stable map to foods (use food_code if present)
+        var_list = []
+        var_ids = []
         for i in range(n):
-            ub = max_qty_per_item if max_qty_per_item is not None else inf
-            x = solver.NumVar(0.0, ub, f'x_{i}') # TODO: Create a map or rename these with the information in the DF
-            vars.append(x)
+            ub = max_qty_per_food if max_qty_per_food is not None else inf
+            fid = str(data.iloc[i]['food_code'])
+            var = solver.NumVar(0.0, ub, f"x_{fid}")
+            var_list.append(var)
+            var_ids.append(fid)
 
-        # protein constraint: sum_i protein_per_g_i * x_i >= min_protein
-        protein_ct = solver.Constraint(min_protein, inf)
-        for i, x in enumerate(vars):
-            protein_ct.SetCoefficient(x, float(data.at[i, 'protein_per_g']))
+        # Build coefficient arrays for all relevant nutrients (constraints + objective)
+        coeff_arrays = {}
+        all_nutrients = set(list(nutrition_constraints.nutrients.keys()) + nutrients_to_optimize)
+        for nutrient in all_nutrients:
+            coeff_arrays[nutrient] = data[nutrient].to_numpy() # np array length n
+            
+        # Add constraints: lb <= sum_i coeff_ij * x_i <= ub, FORALL j in NUTRIENTS
+        for nutrient, bounds in nutrition_constraints.nutrients.items():
+            # support bounds being object-like with min_g/max_g or tuple/dict
+            lb = getattr(bounds, 'min_g', None)
+            ub = getattr(bounds, 'max_g', None)
+            
+            # fallback if bounds are dict-like or tuple-like can be added as needed
+            if lb is None:
+                lb = 0.0
+            if ub is None or (isinstance(ub, float) and math.isinf(ub)):
+                ub_val = inf
+            else:
+                ub_val = float(ub)
+            c = solver.Constraint(float(lb), ub_val)
+            coeffs = coeff_arrays[nutrient]
+            for i, var in enumerate(var_list):
+                c.SetCoefficient(var, float(coeffs[i]))
 
-        # objective: minimize total calories = sum_i energy_per_g_i * x_i
+        # Objective: linear combination of nutrients_to_optimize (default: equal weight)
+        # objective_coefs[i] = sum_k weight_k * coeff_arrays[nutrient_k][i]
         objective = solver.Objective()
-        for i, x in enumerate(vars):
-            objective.SetCoefficient(x, float(data.at[i, 'energy_per_g']))
-        objective.SetMinimization()
+        # equal weights
+        weights = {nut: 1.0 for nut in nutrients_to_optimize}
+        for i, var in enumerate(var_list):
+            coef = 0.0
+            for nut in nutrients_to_optimize:
+                coef += float(weights.get(nut, 1.0)) * float(coeff_arrays[nut][i])
+            objective.SetCoefficient(var, coef)
 
-        # solve
+        if objective_type in ["min", "minimize", "minimization"]:
+            objective.SetMinimization()
+        elif objective_type in ["max", "maximize", "maximization"]:
+            objective.SetMaximization()
+        else:
+            raise ValueError(f"Unrecognized objective_type '{settings.objective_type}'")
+
+        # Solve
         status = solver.Solve()
-
         if status != pywraplp.Solver.OPTIMAL:
             if status == pywraplp.Solver.INFEASIBLE:
-                raise RuntimeError("Problem infeasible: cannot reach protein requirement with available foods.")
+                raise RuntimeError("Problem infeasible: cannot meet nutrition constraints with available foods.")
             else:
                 raise RuntimeError(f"Solver finished with status {status}")
 
-        # extract solution
-        amounts = [v.solution_value() for v in vars]
+        # Extract solution amounts
+        amounts = [v.solution_value() for v in var_list]
         data['amount_g'] = amounts
 
-        # filter tiny numeric noise
+        # Compute contribution columns for each constrained nutrient
+        for nutrient in all_nutrients:
+            data[f"{nutrient}_contrib"] = data['amount_g'] * data[nutrient]
+
+        # energy contribution (kcal)
+        data['energy_kcal_contrib'] = data['amount_g'] * data['energy_kcal']
+
+        # filter tiny numeric noise -> selected
         eps = 1e-9
-        chosen = data[data['amount_g'] > eps].copy()
+        chosen_foods = data[data['amount_g'] > eps].copy().reset_index(drop=True)
 
-        totals = {
-            'total_energy_kcal': float((data['energy_per_g'] * data['amount_g']).sum()),
-            'total_protein_g': float((data['protein_per_g'] * data['amount_g']).sum()),
-            'num_items_chosen': int((data['amount_g'] > eps).sum())
-        }
+        # Totals
+        totals: dict[str, float] = {}
+        totals['num_items_chosen'] = int((chosen_foods['amount_g'] > 0).sum())
+        totals['objective_value'] = float(objective.Value())
+        totals['total_energy_kcal'] = float((data['energy_kcal_contrib']).sum())
+        # totals for each nutrient in constraints & objective
+        for nutrient in all_nutrients:
+            totals[f"total_{nutrient}"] = float(data[f"{nutrient}_contrib"].sum())
 
-        # return chosen items and totals
-        return chosen, totals
+        # attach some diagnostics to returned df (optional)
+        chosen_foods.attrs['solver_status'] = 'OPTIMAL'
+        chosen_foods.attrs['objective_value'] = totals['objective_value']
+
+        print("solve: ...DONE")
+        return chosen_foods, totals

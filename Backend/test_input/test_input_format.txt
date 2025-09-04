@@ -1,0 +1,8 @@
+# Line by line, ignores blank space and comments
+# format is [Name],[Min bound],[Max bound]
+# units are in grams (g)
+
+energy_kcal,1000,2500
+protein_g,250,-
+carbohydrate_g,0,-
+
