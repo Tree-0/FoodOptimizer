@@ -3,7 +3,7 @@ requests
 pandas
 numpy
 openpyxl
-duckdb
+#duckdb # lol don't use this one yet
 pyarrow
 ortools
 fastapi[standard]
