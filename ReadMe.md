@@ -8,10 +8,10 @@ In the future, hopefully support for pricing will be implemented, but it is very
 
 ## Data:
 A combination of data from the Department of Agriculture FoodData Central's API and downloadable files were used.
-**[[https://fdc.nal.usda.gov/|USDA FoodData Central]]**
+**https://fdc.nal.usda.gov/**
 
 Foundation Foods and Branded Foods datasets were downloaded from the following link:
-**[[https://fdc.nal.usda.gov/download-datasets|CSV Downloads]]**
+**https://fdc.nal.usda.gov/download-datasets#bkmk-1**
 
 ## Directory Structure
 
