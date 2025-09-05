@@ -23,12 +23,17 @@ class NutrientConstraint:
         if len(split) != 3:
             raise ValueError("incorrect input, expected 3 elements in the form of [Name],[min_g],[max_g]")
         
+        if split[1] == '-':
+            min_g = 0.0
+        else:
+            min_g = float(split[1])
+
         if split[2] == '-':
             max_g = math.inf
         else:
             max_g = float(split[2])
 
-        obj = NutrientConstraint(name=split[0], min_g=float(split[1]), max_g=max_g)
+        obj = NutrientConstraint(name=split[0], min_g=min_g, max_g=max_g)
         obj.validate(valid_nutrients)
         return obj
 

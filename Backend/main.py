@@ -6,7 +6,22 @@ from nutrition_constraints import NutrientConstraints
 
 print("CALORIE OPTIMIZER V1")
 
-foods_df: pd.DataFrame = FoodDBClient.clean_fndds_foods_for_solve(FoodDBClient.get_fndds_foods())
+
+BASE_DIR = pathlib.Path(__file__).resolve().parent  # folder containing main.py
+food_file = BASE_DIR / "data" / "cleaned_fndds_nutrients.parquet"
+
+# try to read from parquet file, otherwise create the cleaned DF for the first time
+if os.path.exists(food_file):
+    foods_df = pd.read_parquet(food_file)
+    print(f"Loaded data from {food_file}")
+else:
+    print(f"Creating {food_file} for the first time...")
+    foods_df = FoodDBClient.clean_fndds_foods_for_solve(FoodDBClient.get_fndds_foods())
+    os.makedirs(os.path.dirname(food_file), exist_ok=True)
+    foods_df.to_parquet(food_file)
+    print(f"Data saved to {food_file}")
+
+
 nutrient_columns: list[str] = FoodDBClient.get_nutrient_cols(foods_df)
 
 print("valid nutrient types: ")
@@ -48,8 +63,9 @@ chosen, totals = Solver().solve(foods_df, solver_settings)
 # drop any existing description column (no error if it doesn't exist)
 #chosen = chosen.drop(columns=['main_food_description'], errors=True)
 
-print(chosen[['main_food_description','amount_g','protein_g_contrib','carbohydrate_g_contrib','energy_kcal_contrib','total_fat_g_contrib']])
-
+# display amount of each type of food we chose and total nutrient amounts from the solution
+display_cols = ['main_food_description','amount_g'] + [f"{nutrient}_contrib" for nutrient in opt_nutrients]
+print(chosen[display_cols])
 print(totals)
 
 print("\nSOLVER DONE")
