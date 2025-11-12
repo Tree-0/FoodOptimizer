@@ -6,7 +6,7 @@ In the future, hopefully support for pricing will be implemented, but it is very
 
 ## Features
 
-## Data:
+## Data
 A combination of data from the Department of Agriculture FoodData Central's API and downloadable files were used.
 **https://fdc.nal.usda.gov/**
 
